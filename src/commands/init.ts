@@ -3,12 +3,12 @@ import { existsSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 
 const CONFIG_TEMPLATE = `// gh-ping configuration
-// See: https://github.com/user/gh-ping#configuration
+// See: https://github.com/phuvo/gh-ping#configuration
 
 /** @type {import('gh-ping').GhPingUserConfig} */
 export default {
   polling: {
-    intervalMs: 60_000, // 1 minute
+    intervalSec: 60, // 1 minute
   },
   filters: [
     // Only PRs and Issues (skip CI noise like WorkflowRun, CheckSuite)

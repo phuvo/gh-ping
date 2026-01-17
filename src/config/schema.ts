@@ -35,8 +35,8 @@ export type NotificationFilter = (event: NotificationEvent) => boolean;
  */
 export interface GhPingConfig {
   polling: {
-    /** Polling interval in milliseconds (minimum: 10000) */
-    intervalMs: number;
+    /** Polling interval in seconds (minimum: 10) */
+    intervalSec: number;
   };
   /** Array of filter functions - all must return true for notification to show */
   filters: NotificationFilter[];
@@ -51,7 +51,7 @@ export interface GhPingConfig {
  */
 export interface GhPingUserConfig {
   polling?: {
-    intervalMs?: number;
+    intervalSec?: number;
   };
   filters?: NotificationFilter[];
   notifications?: {

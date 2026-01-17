@@ -25,7 +25,7 @@ export const testCommand = new Command('test')
     try {
       config = await loadConfig();
       console.log('   ✔ Config loaded successfully');
-      console.log(`   • Polling interval: ${config.polling.intervalMs / 1000}s`);
+      console.log(`   • Polling interval: ${config.polling.intervalSec}s`);
       console.log(`   • Filters: ${config.filters.length}`);
       console.log(`   • Sound: ${config.notifications.sound ? 'enabled' : 'disabled'}`);
     } catch (err) {

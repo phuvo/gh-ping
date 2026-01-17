@@ -80,7 +80,7 @@ import { defineConfig } from 'gh-ping';
 
 export default defineConfig({
   polling: {
-    intervalMs: 60_000, // 1 minute (minimum: 10 seconds)
+    intervalSec: 60, // 1 minute (minimum: 10 seconds)
   },
   filters: [
     // Only PRs and Issues
@@ -103,7 +103,7 @@ export default defineConfig({
 ```ts
 interface GhPingConfig {
   polling: {
-    intervalMs: number;  // Polling interval (min: 10000ms)
+    intervalSec: number;  // Polling interval (min: 10s)
   };
   filters: NotificationFilter[];  // Array of filter functions
   notifications: {

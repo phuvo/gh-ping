@@ -11,7 +11,7 @@ import { removePidFile } from './pid.js';
 export async function runDaemon(config: GhPingConfig): Promise<void> {
   const state = new StateManager();
 
-  logger.info(`Starting gh-ping daemon (polling every ${config.polling.intervalMs / 1000}s)`);
+  logger.info(`Starting gh-ping daemon (polling every ${config.polling.intervalSec}s)`);
 
   // Handle graceful shutdown
   const shutdown = () => {
@@ -32,7 +32,7 @@ export async function runDaemon(config: GhPingConfig): Promise<void> {
     poll(config, state).catch((err) => {
       logger.error(`Poll failed: ${err.message}`);
     });
-  }, config.polling.intervalMs);
+  }, config.polling.intervalSec * 1000);
 }
 
 /**

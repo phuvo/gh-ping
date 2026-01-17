@@ -1,20 +1,20 @@
 import type { GhPingConfig, GhPingUserConfig } from './schema.js';
 
-const MIN_INTERVAL_MS = 10_000; // 10 seconds minimum
-const DEFAULT_INTERVAL_MS = 60_000; // 1 minute
+const MIN_INTERVAL_SEC = 10; // 10 seconds minimum
+const DEFAULT_INTERVAL_SEC = 60; // 1 minute
 
 /**
  * Apply defaults to user config
  */
 export function applyDefaults(userConfig: GhPingUserConfig): GhPingConfig {
-  const intervalMs = Math.max(
-    userConfig.polling?.intervalMs ?? DEFAULT_INTERVAL_MS,
-    MIN_INTERVAL_MS
+  const intervalSec = Math.max(
+    userConfig.polling?.intervalSec ?? DEFAULT_INTERVAL_SEC,
+    MIN_INTERVAL_SEC
   );
 
   return {
     polling: {
-      intervalMs,
+      intervalSec,
     },
     filters: userConfig.filters ?? [],
     notifications: {

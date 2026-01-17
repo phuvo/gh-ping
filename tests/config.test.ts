@@ -25,7 +25,7 @@ describe('loadConfig', () => {
   it('should load JavaScript ESM config', async () => {
     const configContent = `
       export default {
-        polling: { intervalMs: 30000 },
+        polling: { intervalSec: 30 },
         filters: [],
         notifications: { sound: false },
       };
@@ -33,21 +33,21 @@ describe('loadConfig', () => {
     writeFileSync(join(testDir, 'gh-ping.config.js'), configContent);
 
     const config = await loadConfig(testDir);
-    expect(config.polling.intervalMs).toBe(30000);
+    expect(config.polling.intervalSec).toBe(30);
     expect(config.notifications.sound).toBe(false);
   });
 
   it('should load .mjs config', async () => {
     const configContent = `
       export default {
-        polling: { intervalMs: 45000 },
+        polling: { intervalSec: 45 },
         filters: [],
       };
     `;
     writeFileSync(join(testDir, 'gh-ping.config.mjs'), configContent);
 
     const config = await loadConfig(testDir);
-    expect(config.polling.intervalMs).toBe(45000);
+    expect(config.polling.intervalSec).toBe(45);
   });
 
   it('should apply defaults for missing values', async () => {
@@ -55,7 +55,7 @@ describe('loadConfig', () => {
     writeFileSync(join(testDir, 'gh-ping.config.js'), configContent);
 
     const config = await loadConfig(testDir);
-    expect(config.polling.intervalMs).toBe(60000); // Default 1 minute
+    expect(config.polling.intervalSec).toBe(60); // Default 1 minute
     expect(config.notifications.sound).toBe(true); // Default true
     expect(config.filters).toEqual([]);
   });
@@ -63,13 +63,13 @@ describe('loadConfig', () => {
   it('should enforce minimum polling interval', async () => {
     const configContent = `
       export default {
-        polling: { intervalMs: 1000 }, // Too low
+        polling: { intervalSec: 1 }, // Too low
       };
     `;
     writeFileSync(join(testDir, 'gh-ping.config.js'), configContent);
 
     const config = await loadConfig(testDir);
-    expect(config.polling.intervalMs).toBe(10000); // Minimum 10s
+    expect(config.polling.intervalSec).toBe(10); // Minimum 10s
   });
 
   it('should load filters as functions', async () => {
@@ -102,7 +102,7 @@ describe('loadConfig', () => {
   it('should throw ConfigValidationError for invalid polling interval type', async () => {
     const configContent = `
       export default {
-        polling: { intervalMs: 'not a number' },
+        polling: { intervalSec: 'not a number' },
       };
     `;
     writeFileSync(join(testDir, 'gh-ping.config.js'), configContent);
@@ -111,10 +111,10 @@ describe('loadConfig', () => {
   });
 
   it('should prefer .js over .mjs config', async () => {
-    writeFileSync(join(testDir, 'gh-ping.config.js'), `export default { polling: { intervalMs: 11111 } };`);
-    writeFileSync(join(testDir, 'gh-ping.config.mjs'), `export default { polling: { intervalMs: 22222 } };`);
+    writeFileSync(join(testDir, 'gh-ping.config.js'), `export default { polling: { intervalSec: 111 } };`);
+    writeFileSync(join(testDir, 'gh-ping.config.mjs'), `export default { polling: { intervalSec: 222 } };`);
 
     const config = await loadConfig(testDir);
-    expect(config.polling.intervalMs).toBe(11111);
+    expect(config.polling.intervalSec).toBe(111);
   });
 });

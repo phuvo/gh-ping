@@ -6,7 +6,7 @@ const program = new Command();
 program
   .name('gh-ping')
   .description('GitHub notification alerts via OS notifications')
-  .version('1.0.0');
+  .version('0.1.0');
 
 program.addCommand(startCommand);
 program.addCommand(stopCommand);

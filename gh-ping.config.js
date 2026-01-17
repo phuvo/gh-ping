@@ -4,7 +4,7 @@
 /** @type {import('gh-ping').GhPingUserConfig} */
 export default {
   polling: {
-    intervalMs: 60_000, // 1 minute
+    intervalSec: 60, // 1 minute
   },
   filters: [
     // Only PRs and Issues (skip CI noise like WorkflowRun, CheckSuite)
