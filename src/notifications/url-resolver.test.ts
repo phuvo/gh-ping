@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { resolveHtmlUrl } from '../src/notifications/url-resolver.js';
-import type { GitHubNotification } from '../src/github/types.js';
+import { resolveHtmlUrl } from './url-resolver.js';
+import type { GitHubNotification } from '../github/types.js';
 
 function createNotification(overrides: Partial<GitHubNotification>): GitHubNotification {
   return {

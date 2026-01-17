@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { loadConfig, ConfigNotFoundError, ConfigValidationError } from '../src/config/loader.js';
+import { loadConfig, ConfigNotFoundError, ConfigValidationError } from './loader.js';
 
 describe('loadConfig', () => {
   let testDir: string;

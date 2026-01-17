@@ -7,7 +7,7 @@ import { tmpdir } from 'os';
 const testDir = join(tmpdir(), `gh-ping-test-${Date.now()}`);
 const testStatePath = join(testDir, 'state.json');
 
-vi.mock('../src/utils/paths.js', () => ({
+vi.mock('../utils/paths.js', () => ({
   getDataDir: () => testDir,
   getStatePath: () => testStatePath,
   getPidPath: () => join(testDir, 'daemon.pid'),
@@ -15,7 +15,7 @@ vi.mock('../src/utils/paths.js', () => ({
 }));
 
 // Import after mocking
-const { StateManager } = await import('../src/state/state.js');
+const { StateManager } = await import('./state.js');
 
 describe('StateManager', () => {
   beforeEach(() => {
