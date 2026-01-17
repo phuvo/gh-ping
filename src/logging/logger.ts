@@ -72,12 +72,8 @@ class Logger {
     this.log('debug', message);
   }
 
-  success(message: string): void {
-    console.log(chalk.green('✓'), message);
-  }
-
-  ping(message: string): void {
-    console.log(chalk.magenta('🔔'), message);
+  ping(title: string, body: string): void {
+    this.log('info', title + chalk.dim(': ' + body));
   }
 }
 

@@ -83,7 +83,7 @@ async function poll(config: GhPingConfig, state: StateManager): Promise<void> {
   for (const event of filtered) {
     const repoName = getRepoDisplayName(event.repository.fullName, config.repoAliases);
     const title = formatTitle(event, repoName);
-    logger.info(`${title}: ${event.subject.title}`);
+    logger.ping(title, event.subject.title);
 
     await sendNotification(event, {
       sound: config.notifications.sound ?? true,

@@ -1,4 +1,5 @@
 import notifier from 'node-notifier';
+import type { Notification } from 'node-notifier/notifiers/notificationcenter.js';
 import open from 'open';
 import type { NotificationEvent } from '../config/schema.js';
 
@@ -14,7 +15,7 @@ export function sendNotification(event: NotificationEvent, options: NotifyOption
   return new Promise((resolve) => {
     const repoName = getRepoDisplayName(event.repository.fullName, options.repoAliases);
     const title = formatTitle(event, repoName);
-    const notification = {
+    const notification: Notification = {
       title,
       message: event.subject.title,
       sound: options.sound,
