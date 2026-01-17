@@ -44,6 +44,8 @@ export interface GhPingConfig {
     /** Play sound with notification (default: true) */
     sound?: boolean;
   };
+  /** Map of full repo names to short aliases (e.g., "acme/my-long-repo-name" -> "repo") */
+  repoAliases: Record<string, string>;
 }
 
 /**
@@ -57,6 +59,8 @@ export interface GhPingUserConfig {
   notifications?: {
     sound?: boolean;
   };
+  /** Map of full repo names to short aliases (e.g., "acme/my-long-repo-name" -> "repo") */
+  repoAliases?: Record<string, string>;
 }
 
 /**

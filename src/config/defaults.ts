@@ -20,5 +20,6 @@ export function applyDefaults(userConfig: GhPingUserConfig): GhPingConfig {
     notifications: {
       sound: userConfig.notifications?.sound ?? true,
     },
+    repoAliases: userConfig.repoAliases ?? {},
   };
 }

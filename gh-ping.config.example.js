@@ -5,6 +5,7 @@ export default {
   polling: {
     intervalSec: 60, // 1 minute
   },
+
   filters: [
     // Only PRs and Issues (skip CI noise like WorkflowRun, CheckSuite)
     (e) => ['PullRequest', 'Issue'].includes(e.subject.type),
@@ -18,6 +19,12 @@ export default {
     // Example: Only specific repos
     // (e) => e.repository.fullName.startsWith('my-org/'),
   ],
+
+  // Short aliases for repository names (shown in notifications)
+  repoAliases: {
+    // 'owner/long-repository-name': 'short-name',
+  },
+
   notifications: {
     sound: true,
   },

@@ -1,6 +1,6 @@
 import type { GhPingConfig, NotificationEvent } from '../config/schema.js';
 import { fetchNotifications, GitHubClientError } from '../github/client.js';
-import { sendNotification } from '../notifications/notifier.js';
+import { sendNotification, formatTitle, getRepoDisplayName } from '../notifications/notifier.js';
 import { StateManager } from '../state/state.js';
 import { logger } from '../logging/logger.js';
 import { removePidFile } from './pid.js';
@@ -81,10 +81,13 @@ async function poll(config: GhPingConfig, state: StateManager): Promise<void> {
 
   // Send notifications
   for (const event of filtered) {
-    logger.info(`Notifying: [${event.repository.fullName}] ${event.subject.title}`);
+    const repoName = getRepoDisplayName(event.repository.fullName, config.repoAliases);
+    const title = formatTitle(event, repoName);
+    logger.info(`${title}: ${event.subject.title}`);
 
     await sendNotification(event, {
       sound: config.notifications.sound ?? true,
+      repoAliases: config.repoAliases,
     });
 
     state.markSeen(event.id);
