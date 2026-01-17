@@ -1,7 +1,6 @@
-// gh-ping configuration
-// See: https://github.com/user/gh-ping#configuration
+// See: https://github.com/phuvo/gh-ping#configuration
 
-/** @type {import('gh-ping').GhPingUserConfig} */
+/** @type {import('./src/config/schema.js').GhPingUserConfig} */
 export default {
   polling: {
     intervalSec: 60, // 1 minute
