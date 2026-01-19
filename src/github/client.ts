@@ -124,6 +124,51 @@ function parseGhOutput(output: string): GitHubNotification[] {
 }
 
 /**
+ * Pull request details from the API
+ */
+export interface PullRequestDetails {
+  merged: boolean;
+  state: 'open' | 'closed';
+}
+
+/**
+ * Fetch PR details to check if it's merged
+ * @param apiUrl - The API URL from notification subject (e.g., https://api.github.com/repos/owner/repo/pulls/123)
+ */
+export async function fetchPullRequest(apiUrl: string): Promise<PullRequestDetails | null> {
+  return new Promise((resolve) => {
+    const proc = spawn('gh', ['api', apiUrl], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: true,
+    });
+
+    let stdout = '';
+
+    proc.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
+
+    proc.on('error', () => {
+      resolve(null);
+    });
+
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        resolve(null);
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(stdout.trim());
+        resolve({ merged: parsed.merged, state: parsed.state });
+      } catch {
+        resolve(null);
+      }
+    });
+  });
+}
+
+/**
  * Check if gh CLI is available and authenticated
  */
 export async function checkGhAuth(): Promise<{ ok: boolean; error?: string }> {

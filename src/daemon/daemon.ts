@@ -1,5 +1,5 @@
 import type { GhPingConfig, NotificationEvent } from '../config/schema.js';
-import { fetchNotifications, GitHubClientError } from '../github/client.js';
+import { fetchNotifications, fetchPullRequest, GitHubClientError } from '../github/client.js';
 import { sendNotification, formatTitle, getRepoDisplayName } from '../notifications/notifier.js';
 import { StateManager } from '../state/state.js';
 import { logger } from '../logging/logger.js';
@@ -81,9 +81,15 @@ async function poll(config: GhPingConfig, state: StateManager): Promise<void> {
 
   // Send notifications
   for (const event of filtered) {
+    // Skip merged PRs (check just before showing notification)
+    if (await isMergedPR(event)) {
+      logger.ping('debug', 'Skipping merged PR', event.subject.title);
+      continue;
+    }
+
     const repoName = getRepoDisplayName(event.repository.fullName, config.repoAliases);
     const title = formatTitle(event, repoName);
-    logger.ping(title, event.subject.title);
+    logger.ping('info', title, event.subject.title);
 
     await sendNotification(event, {
       sound: config.notifications.sound ?? true,
@@ -98,4 +104,21 @@ async function poll(config: GhPingConfig, state: StateManager): Promise<void> {
   state.markSeenBatch(notifications.map((n) => n.id));
   state.updateLastPoll();
   state.save();
+}
+
+/**
+ * Check if a notification is for a PR that's already merged
+ */
+async function isMergedPR(event: NotificationEvent): Promise<boolean> {
+  if (event.subject.type !== 'PullRequest') {
+    return false;
+  }
+
+  const apiUrl = event._raw.subject.url;
+  if (!apiUrl) {
+    return false;
+  }
+
+  const pr = await fetchPullRequest(apiUrl);
+  return pr?.merged === true;
 }

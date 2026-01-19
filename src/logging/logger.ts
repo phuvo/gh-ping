@@ -72,8 +72,8 @@ class Logger {
     this.log('debug', message);
   }
 
-  ping(title: string, body: string): void {
-    this.log('info', title + chalk.dim(': ' + body));
+  ping(level: LogLevel, action: string, title: string): void {
+    this.log(level, action + chalk.dim(': ' + title));
   }
 }
 
