@@ -16,13 +16,6 @@ export function getDataDir(): string {
 }
 
 /**
- * Get path to state file (~/.gh-ping/state.json)
- */
-export function getStatePath(): string {
-  return join(getDataDir(), 'state.json');
-}
-
-/**
  * Get path to PID file (~/.gh-ping/daemon.pid)
  */
 export function getPidPath(): string {

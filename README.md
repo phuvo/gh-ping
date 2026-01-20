@@ -154,11 +154,10 @@ filters: [
 ]
 ```
 
-## State & Logs
+## Logs
 
-gh-ping stores state in `~/.gh-ping/`:
+gh-ping stores daemon data in `~/.gh-ping/`:
 
-- `state.json` — Seen notifications, last poll time
 - `daemon.pid` — Daemon process ID
 - `daemon.log` — Log output (when running in background)
 

@@ -23,8 +23,8 @@ export class GitHubClientError extends Error {
 /**
  * Fetch notifications using gh CLI
  */
-export async function fetchNotifications(): Promise<FetchNotificationsResult> {
-  const raw = await fetchRawNotifications();
+export async function fetchNotifications(options?: { since?: Date }): Promise<FetchNotificationsResult> {
+  const raw = await fetchRawNotifications(options);
   return {
     notifications: transformNotifications(raw.notifications),
     pollIntervalSec: raw.pollIntervalSec,
@@ -34,9 +34,14 @@ export async function fetchNotifications(): Promise<FetchNotificationsResult> {
 /**
  * Fetch raw notifications from gh api
  */
-export async function fetchRawNotifications(): Promise<FetchRawNotificationsResult> {
+export async function fetchRawNotifications(options?: { since?: Date }): Promise<FetchRawNotificationsResult> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('gh', ['api', 'notifications', '--paginate', '--include'], {
+    const args = ['api', 'notifications', '--paginate', '--include'];
+    if (options?.since) {
+      args.push('-f', `since=${options.since.toISOString()}`);
+    }
+
+    const proc = spawn('gh', args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: true, // Required for Windows PATH resolution
     });

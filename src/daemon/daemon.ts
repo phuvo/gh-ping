@@ -1,24 +1,27 @@
 import type { GhPingConfig, NotificationEvent } from '../config/schema.js';
 import { fetchNotifications, fetchPullRequest, GitHubClientError } from '../github/client.js';
 import { sendNotification, formatTitle, getRepoDisplayName } from '../notifications/notifier.js';
-import { StateManager } from '../state/state.js';
 import { logger } from '../logging/logger.js';
 import { removePidFile } from './pid.js';
+
+interface PollResult {
+  pollIntervalSec?: number;
+  nextSince: Date | null;
+}
 
 /**
  * Run the daemon poll loop
  */
 export async function runDaemon(config: GhPingConfig): Promise<void> {
-  const state = new StateManager();
   const fallbackPollIntervalSec = 60;
   let nextPollIntervalSec = fallbackPollIntervalSec;
+  let since: Date | null = null;
 
   logger.info('Starting gh-ping daemon');
 
   // Handle graceful shutdown
   const shutdown = () => {
     logger.info('Shutting down...');
-    state.save();
     removePidFile();
     process.exit(0);
   };
@@ -29,7 +32,9 @@ export async function runDaemon(config: GhPingConfig): Promise<void> {
   // Initial poll
   let initialPollIntervalSec: number | undefined;
   try {
-    initialPollIntervalSec = await poll(config, state);
+    const result = await poll(config, since);
+    initialPollIntervalSec = result.pollIntervalSec;
+    since = result.nextSince;
   } catch (err) {
     logger.error(`Poll failed: ${err instanceof Error ? err.message : err}`);
   }
@@ -41,9 +46,10 @@ export async function runDaemon(config: GhPingConfig): Promise<void> {
 
     logger.debug(`Next poll in ${nextPollIntervalSec}s`);
     setTimeout(() => {
-      poll(config, state)
-        .then((nextIntervalSec) => {
-          scheduleNext(nextIntervalSec);
+      poll(config, since)
+        .then((result) => {
+          since = result.nextSince;
+          scheduleNext(result.pollIntervalSec);
         })
         .catch((err) => {
           logger.error(`Poll failed: ${err instanceof Error ? err.message : err}`);
@@ -58,14 +64,15 @@ export async function runDaemon(config: GhPingConfig): Promise<void> {
 /**
  * Single poll iteration
  */
-async function poll(config: GhPingConfig, state: StateManager): Promise<number | undefined> {
+async function poll(config: GhPingConfig, since: Date | null): Promise<PollResult> {
   logger.debug('Polling notifications...');
+  const requestStartedAt = new Date();
 
   let notifications: NotificationEvent[];
   let pollIntervalSec: number | undefined;
 
   try {
-    const result = await fetchNotifications();
+    const result = await fetchNotifications({ since: since ?? undefined });
     notifications = result.notifications;
     pollIntervalSec = result.pollIntervalSec;
   } catch (err) {
@@ -74,7 +81,7 @@ async function poll(config: GhPingConfig, state: StateManager): Promise<number |
     } else {
       logger.error(`Failed to fetch notifications: ${err}`);
     }
-    return pollIntervalSec;
+    return { pollIntervalSec, nextSince: since };
   }
 
   logger.debug(`Fetched ${notifications.length} notifications`);
@@ -83,11 +90,7 @@ async function poll(config: GhPingConfig, state: StateManager): Promise<number |
   }
 
   // Filter to new, unread notifications
-  const newNotifications = notifications.filter((n) => {
-    if (!n.unread) return false;
-    if (!state.isNew(n.id)) return false;
-    return true;
-  });
+  const newNotifications = notifications.filter((n) => n.unread);
 
   logger.debug(`${newNotifications.length} are new and unread`);
 
@@ -120,17 +123,10 @@ async function poll(config: GhPingConfig, state: StateManager): Promise<number |
       sound: config.notifications.sound ?? true,
       repoAliases: config.repoAliases,
     });
-
-    state.markSeen(event.id);
   }
 
-  // Mark all fetched notifications as seen (even if filtered out)
-  // This prevents re-processing on next poll
-  state.markSeenBatch(notifications.map((n) => n.id));
-  state.updateLastPoll();
-  state.save();
-
-  return pollIntervalSec;
+  const nextSince = getNextSince(since, notifications, requestStartedAt);
+  return { pollIntervalSec, nextSince };
 }
 
 /**
@@ -148,4 +144,24 @@ async function isClosedPR(event: NotificationEvent): Promise<boolean> {
 
   const pr = await fetchPullRequest(apiUrl);
   return pr?.state === 'closed';
+}
+
+function getNextSince(
+  previousSince: Date | null,
+  notifications: NotificationEvent[],
+  requestStartedAt: Date
+): Date | null {
+  let maxUpdatedAt: Date | null = null;
+
+  for (const notification of notifications) {
+    if (!maxUpdatedAt || notification.updatedAt > maxUpdatedAt) {
+      maxUpdatedAt = notification.updatedAt;
+    }
+  }
+
+  if (maxUpdatedAt) {
+    return previousSince && previousSince > maxUpdatedAt ? previousSince : maxUpdatedAt;
+  }
+
+  return previousSince ?? requestStartedAt;
 }

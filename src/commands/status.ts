@@ -1,7 +1,6 @@
 import { Command } from 'commander';
 import { getDaemonStatus } from '../daemon/index.js';
 import { findConfigPath } from '../config/loader.js';
-import { StateManager } from '../state/state.js';
 import { checkGhAuth } from '../github/client.js';
 import { getDataDir, getLogPath } from '../utils/paths.js';
 
@@ -34,17 +33,6 @@ export const statusCommand = new Command('status')
     } else {
       console.log('  Auth: Not authenticated');
       console.log(`  Error: ${authCheck.error}`);
-    }
-
-    // State
-    const state = new StateManager();
-    const lastPoll = state.getLastPoll();
-    console.log('\nState:');
-    console.log(`  Seen notifications: ${state.getSeenCount()}`);
-    if (lastPoll) {
-      console.log(`  Last poll: ${lastPoll.toLocaleString()}`);
-    } else {
-      console.log('  Last poll: Never');
     }
 
     // Paths
