@@ -36,7 +36,7 @@ export async function fetchNotifications(options?: { since?: Date }): Promise<Fe
  */
 export async function fetchRawNotifications(options?: { since?: Date }): Promise<FetchRawNotificationsResult> {
   return new Promise((resolve, reject) => {
-    const args = ['api', 'notifications', '--paginate', '--include'];
+    const args = ['api', 'notifications', '--method', 'GET', '--include'];
     if (options?.since) {
       args.push('-f', `since=${options.since.toISOString()}`);
     }
@@ -77,8 +77,6 @@ export async function fetchRawNotifications(options?: { since?: Date }): Promise
       }
 
       try {
-        // gh api --paginate --include returns headers + concatenated JSON arrays
-        // We need to handle both single array and multiple arrays
         const parsed = parseGhOutputWithHeaders(stdout);
         resolve(parsed);
       } catch (e) {
@@ -91,52 +89,10 @@ export async function fetchRawNotifications(options?: { since?: Date }): Promise
   });
 }
 
-/**
- * Parse gh api --paginate output
- * It may return multiple JSON arrays concatenated together
- */
-function parseGhOutput(output: string): GitHubNotification[] {
-  const trimmed = output.trim();
-
-  if (!trimmed) {
-    return [];
-  }
-
-  // Try parsing as single array first
-  try {
-    const result = JSON.parse(trimmed);
-    return Array.isArray(result) ? result : [result];
-  } catch {
-    // If that fails, try to find and merge multiple arrays
-    // gh --paginate concatenates arrays like: [{...}][{...}]
-    const results: GitHubNotification[] = [];
-    let depth = 0;
-    let start = -1;
-
-    for (let i = 0; i < trimmed.length; i++) {
-      const char = trimmed[i];
-      if (char === '[') {
-        if (depth === 0) start = i;
-        depth++;
-      } else if (char === ']') {
-        depth--;
-        if (depth === 0 && start !== -1) {
-          const chunk = trimmed.slice(start, i + 1);
-          const parsed = JSON.parse(chunk) as GitHubNotification[];
-          results.push(...parsed);
-          start = -1;
-        }
-      }
-    }
-
-    return results;
-  }
-}
-
 function parseGhOutputWithHeaders(output: string): FetchRawNotificationsResult {
   const { body, pollIntervalSec } = extractHeaders(output);
   return {
-    notifications: parseGhOutput(body),
+    notifications: JSON.parse(body),
     pollIntervalSec,
   };
 }
