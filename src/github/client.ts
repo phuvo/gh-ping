@@ -1,4 +1,4 @@
-import { spawn } from 'child_process';
+import { spawn } from 'node:child_process';
 import type { GitHubNotification, PullRequestDetails } from './types.js';
 import type { NotificationEvent } from '../config/schema.js';
 import { transformNotifications } from './transform.js';
@@ -45,18 +45,10 @@ export async function fetchRawNotifications(): Promise<GitHubNotification[]> {
 
     proc.on('close', (code) => {
       if (code !== 0) {
-        // Check for common errors
-        if (stderr.includes('gh auth login')) {
-          reject(new GitHubClientError(
-            'GitHub CLI not authenticated. Run: gh auth login',
-            stderr
-          ));
-        } else {
-          reject(new GitHubClientError(
-            `gh api failed with exit code ${code}: ${stderr.trim()}`,
-            stderr
-          ));
-        }
+        reject(new GitHubClientError(
+          `gh api failed with exit code ${code}: ${stderr.trim()}`,
+          stderr
+        ));
         return;
       }
 
@@ -127,34 +119,45 @@ function parseGhOutput(output: string): GitHubNotification[] {
  * Fetch PR details to check if it's merged
  * @param apiUrl - The API URL from notification subject (e.g., https://api.github.com/repos/owner/repo/pulls/123)
  */
-export async function fetchPullRequest(apiUrl: string): Promise<PullRequestDetails | null> {
-  return new Promise((resolve) => {
+export async function fetchPullRequest(apiUrl: string): Promise<PullRequestDetails> {
+  return new Promise((resolve, reject) => {
     const proc = spawn('gh', ['api', apiUrl], {
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: true,
     });
 
     let stdout = '';
+    let stderr = '';
 
     proc.stdout.on('data', (data: Buffer) => {
       stdout += data.toString();
     });
 
-    proc.on('error', () => {
-      resolve(null);
+    proc.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
+
+    proc.on('error', (err) => {
+      reject(new GitHubClientError(`Failed to spawn gh CLI: ${err.message}`, ''));
     });
 
     proc.on('close', (code) => {
       if (code !== 0) {
-        resolve(null);
+        reject(new GitHubClientError(
+          `gh api failed with exit code ${code}: ${stderr.trim()}`,
+          stderr
+        ));
         return;
       }
 
       try {
         const parsed = JSON.parse(stdout.trim());
-        resolve({ merged: parsed.merged, state: parsed.state });
-      } catch {
-        resolve(null);
+        resolve(parsed);
+      } catch (e) {
+        reject(new GitHubClientError(
+          `Failed to parse gh output: ${e instanceof Error ? e.message : String(e)}`,
+          stdout
+        ));
       }
     });
   });

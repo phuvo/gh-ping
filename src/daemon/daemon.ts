@@ -81,9 +81,8 @@ async function poll(config: GhPingConfig, state: StateManager): Promise<void> {
 
   // Send notifications
   for (const event of filtered) {
-    // Skip merged PRs (check just before showing notification)
-    if (await isMergedPR(event)) {
-      logger.ping('debug', 'Skipping merged PR', event.subject.title);
+    if (await isClosedPR(event)) {
+      logger.ping('debug', 'Skipping closed PR', event.subject.title);
       continue;
     }
 
@@ -107,9 +106,9 @@ async function poll(config: GhPingConfig, state: StateManager): Promise<void> {
 }
 
 /**
- * Check if a notification is for a PR that's already merged
+ * Check if a notification is for a PR that's already closed
  */
-async function isMergedPR(event: NotificationEvent): Promise<boolean> {
+async function isClosedPR(event: NotificationEvent): Promise<boolean> {
   if (event.subject.type !== 'PullRequest') {
     return false;
   }
@@ -120,5 +119,5 @@ async function isMergedPR(event: NotificationEvent): Promise<boolean> {
   }
 
   const pr = await fetchPullRequest(apiUrl);
-  return pr?.merged === true;
+  return pr?.state === 'closed';
 }

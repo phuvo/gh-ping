@@ -10,7 +10,5 @@ export type GitHubNotification =
 export type NotificationReason = GitHubNotification['reason'];
 export type SubjectType = GitHubNotification['subject']['type'];
 
-type PullRequestResponse =
+export type PullRequestDetails =
   Endpoints['GET /repos/{owner}/{repo}/pulls/{pull_number}']['response']['data'];
-
-export type PullRequestDetails = Pick<PullRequestResponse, 'merged' | 'state'>;
