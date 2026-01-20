@@ -1,5 +1,5 @@
 import { spawn } from 'child_process';
-import type { GitHubNotification } from './types.js';
+import type { GitHubNotification, PullRequestDetails } from './types.js';
 import type { NotificationEvent } from '../config/schema.js';
 import { transformNotifications } from './transform.js';
 
@@ -121,14 +121,6 @@ function parseGhOutput(output: string): GitHubNotification[] {
 
     return results;
   }
-}
-
-/**
- * Pull request details from the API
- */
-export interface PullRequestDetails {
-  merged: boolean;
-  state: 'open' | 'closed';
 }
 
 /**
