@@ -57,17 +57,6 @@ function validateConfig(config: unknown): asserts config is GhPingUserConfig {
 
   const c = config as Record<string, unknown>;
 
-  // Validate polling
-  if (c.polling !== undefined) {
-    if (typeof c.polling !== 'object' || c.polling === null) {
-      throw new ConfigValidationError('polling must be an object');
-    }
-    const polling = c.polling as Record<string, unknown>;
-    if (polling.intervalSec !== undefined && typeof polling.intervalSec !== 'number') {
-      throw new ConfigValidationError('polling.intervalSec must be a number');
-    }
-  }
-
   // Validate filters
   if (c.filters !== undefined) {
     if (!Array.isArray(c.filters)) {

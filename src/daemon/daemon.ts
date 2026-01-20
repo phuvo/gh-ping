@@ -10,8 +10,10 @@ import { removePidFile } from './pid.js';
  */
 export async function runDaemon(config: GhPingConfig): Promise<void> {
   const state = new StateManager();
+  const fallbackPollIntervalSec = 60;
+  let nextPollIntervalSec = fallbackPollIntervalSec;
 
-  logger.info(`Starting gh-ping daemon (polling every ${config.polling.intervalSec}s)`);
+  logger.info('Starting gh-ping daemon');
 
   // Handle graceful shutdown
   const shutdown = () => {
@@ -25,36 +27,60 @@ export async function runDaemon(config: GhPingConfig): Promise<void> {
   process.on('SIGINT', shutdown);
 
   // Initial poll
-  await poll(config, state);
+  let initialPollIntervalSec: number | undefined;
+  try {
+    initialPollIntervalSec = await poll(config, state);
+  } catch (err) {
+    logger.error(`Poll failed: ${err instanceof Error ? err.message : err}`);
+  }
 
-  // Set up polling interval
-  setInterval(() => {
-    poll(config, state).catch((err) => {
-      logger.error(`Poll failed: ${err.message}`);
-    });
-  }, config.polling.intervalSec * 1000);
+  const scheduleNext = (pollIntervalSec?: number) => {
+    if (typeof pollIntervalSec === 'number' && Number.isFinite(pollIntervalSec) && pollIntervalSec > 0) {
+      nextPollIntervalSec = pollIntervalSec;
+    }
+
+    logger.debug(`Next poll in ${nextPollIntervalSec}s`);
+    setTimeout(() => {
+      poll(config, state)
+        .then((nextIntervalSec) => {
+          scheduleNext(nextIntervalSec);
+        })
+        .catch((err) => {
+          logger.error(`Poll failed: ${err instanceof Error ? err.message : err}`);
+          scheduleNext();
+        });
+    }, nextPollIntervalSec * 1000);
+  };
+
+  scheduleNext(initialPollIntervalSec);
 }
 
 /**
  * Single poll iteration
  */
-async function poll(config: GhPingConfig, state: StateManager): Promise<void> {
+async function poll(config: GhPingConfig, state: StateManager): Promise<number | undefined> {
   logger.debug('Polling notifications...');
 
   let notifications: NotificationEvent[];
+  let pollIntervalSec: number | undefined;
 
   try {
-    notifications = await fetchNotifications();
+    const result = await fetchNotifications();
+    notifications = result.notifications;
+    pollIntervalSec = result.pollIntervalSec;
   } catch (err) {
     if (err instanceof GitHubClientError) {
       logger.error(err.message);
     } else {
       logger.error(`Failed to fetch notifications: ${err}`);
     }
-    return;
+    return pollIntervalSec;
   }
 
   logger.debug(`Fetched ${notifications.length} notifications`);
+  if (pollIntervalSec !== undefined) {
+    logger.debug(`GitHub poll interval: ${pollIntervalSec}s`);
+  }
 
   // Filter to new, unread notifications
   const newNotifications = notifications.filter((n) => {
@@ -103,6 +129,8 @@ async function poll(config: GhPingConfig, state: StateManager): Promise<void> {
   state.markSeenBatch(notifications.map((n) => n.id));
   state.updateLastPoll();
   state.save();
+
+  return pollIntervalSec;
 }
 
 /**

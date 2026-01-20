@@ -7,9 +7,6 @@ const CONFIG_TEMPLATE = `// gh-ping configuration
 
 /** @type {import('gh-ping').GhPingUserConfig} */
 export default {
-  polling: {
-    intervalSec: 60, // 1 minute
-  },
   filters: [
     // Only PRs and Issues (skip CI noise like WorkflowRun, CheckSuite)
     (e) => ['PullRequest', 'Issue'].includes(e.subject.type),

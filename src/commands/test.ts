@@ -25,7 +25,6 @@ export const testCommand = new Command('test')
     try {
       config = await loadConfig();
       console.log('   ✔ Config loaded successfully');
-      console.log(`   • Polling interval: ${config.polling.intervalSec}s`);
       console.log(`   • Filters: ${config.filters.length}`);
       console.log(`   • Sound: ${config.notifications.sound ? 'enabled' : 'disabled'}`);
     } catch (err) {
@@ -45,12 +44,15 @@ export const testCommand = new Command('test')
     // Test fetching notifications
     console.log('\n3. Fetching notifications...');
     try {
-      const notifications = await fetchNotifications();
-      console.log(`   ✔ Fetched ${notifications.length} notifications`);
+      const result = await fetchNotifications();
+      console.log(`   ✔ Fetched ${result.notifications.length} notifications`);
+      if (result.pollIntervalSec !== undefined) {
+        console.log(`   • GitHub poll interval: ${result.pollIntervalSec}s`);
+      }
 
       // Show sample if any exist
-      if (notifications.length > 0) {
-        const sample = notifications[0];
+      if (result.notifications.length > 0) {
+        const sample = result.notifications[0];
         console.log(`   Sample: [${sample.repository.fullName}] ${sample.subject.title}`);
       }
     } catch (err) {

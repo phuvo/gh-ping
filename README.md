@@ -5,7 +5,7 @@ A CLI tool that sends OS notifications for GitHub activity, powered by the GitHu
 ## Features
 
 - **No token management** — Uses `gh` CLI for authentication (supports SSO, OAuth, etc.)
-- **Real-time notifications** — Polls GitHub at configurable intervals
+- **Real-time notifications** — Polls GitHub at the interval recommended by the API
 - **Cross-platform** — Windows toast, macOS Notification Center, Linux libnotify
 - **Click to open** — Clicking a notification opens the PR/issue in your browser
 - **TypeScript filters** — Write filter rules as code for maximum flexibility
@@ -79,9 +79,6 @@ gh-ping looks for config files in this order:
 import { defineConfig } from 'gh-ping';
 
 export default defineConfig({
-  polling: {
-    intervalSec: 60, // 1 minute (minimum: 10 seconds)
-  },
   filters: [
     // Only PRs and Issues
     (e) => ['PullRequest', 'Issue'].includes(e.subject.type),
@@ -102,9 +99,6 @@ export default defineConfig({
 
 ```ts
 interface GhPingConfig {
-  polling: {
-    intervalSec: number;  // Polling interval (min: 10s)
-  };
   filters: NotificationFilter[];  // Array of filter functions
   notifications: {
     sound?: boolean;  // Play sound (default: true)

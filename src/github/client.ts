@@ -3,6 +3,16 @@ import type { GitHubNotification, PullRequestDetails } from './types.js';
 import type { NotificationEvent } from '../config/schema.js';
 import { transformNotifications } from './transform.js';
 
+export interface FetchNotificationsResult {
+  notifications: NotificationEvent[];
+  pollIntervalSec?: number;
+}
+
+interface FetchRawNotificationsResult {
+  notifications: GitHubNotification[];
+  pollIntervalSec?: number;
+}
+
 export class GitHubClientError extends Error {
   constructor(message: string, public readonly stderr: string) {
     super(message);
@@ -13,17 +23,20 @@ export class GitHubClientError extends Error {
 /**
  * Fetch notifications using gh CLI
  */
-export async function fetchNotifications(): Promise<NotificationEvent[]> {
+export async function fetchNotifications(): Promise<FetchNotificationsResult> {
   const raw = await fetchRawNotifications();
-  return transformNotifications(raw);
+  return {
+    notifications: transformNotifications(raw.notifications),
+    pollIntervalSec: raw.pollIntervalSec,
+  };
 }
 
 /**
  * Fetch raw notifications from gh api
  */
-export async function fetchRawNotifications(): Promise<GitHubNotification[]> {
+export async function fetchRawNotifications(): Promise<FetchRawNotificationsResult> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('gh', ['api', 'notifications', '--paginate'], {
+    const proc = spawn('gh', ['api', 'notifications', '--paginate', '--include'], {
       stdio: ['ignore', 'pipe', 'pipe'],
       shell: true, // Required for Windows PATH resolution
     });
@@ -54,14 +67,14 @@ export async function fetchRawNotifications(): Promise<GitHubNotification[]> {
 
       // Handle empty response
       if (!stdout.trim()) {
-        resolve([]);
+        resolve({ notifications: [] });
         return;
       }
 
       try {
-        // gh api --paginate returns concatenated JSON arrays
+        // gh api --paginate --include returns headers + concatenated JSON arrays
         // We need to handle both single array and multiple arrays
-        const parsed = parseGhOutput(stdout);
+        const parsed = parseGhOutputWithHeaders(stdout);
         resolve(parsed);
       } catch (e) {
         reject(new GitHubClientError(
@@ -113,6 +126,47 @@ function parseGhOutput(output: string): GitHubNotification[] {
 
     return results;
   }
+}
+
+function parseGhOutputWithHeaders(output: string): FetchRawNotificationsResult {
+  const { body, pollIntervalSec } = extractHeaders(output);
+  return {
+    notifications: parseGhOutput(body),
+    pollIntervalSec,
+  };
+}
+
+function extractHeaders(output: string): { body: string; pollIntervalSec?: number } {
+  const lines = output.split(/\r?\n/);
+  const bodyLines: string[] = [];
+  let pollIntervalSec: number | undefined;
+  let inHeaders = false;
+
+  for (const line of lines) {
+    if (line.startsWith('HTTP/')) {
+      inHeaders = true;
+      continue;
+    }
+
+    if (inHeaders) {
+      if (!line.trim()) {
+        inHeaders = false;
+        continue;
+      }
+      const match = /^x-poll-interval:\s*(\d+)/i.exec(line);
+      if (match) {
+        const parsed = Number.parseInt(match[1], 10);
+        if (!Number.isNaN(parsed)) {
+          pollIntervalSec = parsed;
+        }
+      }
+      continue;
+    }
+
+    bodyLines.push(line);
+  }
+
+  return { body: bodyLines.join('\n'), pollIntervalSec };
 }
 
 /**

@@ -2,10 +2,6 @@
 
 /** @type {import('./src/config/schema.js').GhPingUserConfig} */
 export default {
-  polling: {
-    intervalSec: 60, // 1 minute
-  },
-
   filters: [
     // Only PRs and Issues (skip CI noise like WorkflowRun, CheckSuite)
     (e) => ['PullRequest', 'Issue'].includes(e.subject.type),
