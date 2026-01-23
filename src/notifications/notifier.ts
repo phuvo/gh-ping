@@ -6,6 +6,8 @@ import type { NotificationEvent } from '../config/schema.js';
 interface NotifyOptions {
   sound: boolean;
   repoAliases: Record<string, string>;
+  titleOverride?: string;
+  messageOverride?: string;
 }
 
 /**
@@ -14,10 +16,10 @@ interface NotifyOptions {
 export function sendNotification(event: NotificationEvent, options: NotifyOptions): Promise<void> {
   return new Promise((resolve) => {
     const repoName = getRepoDisplayName(event.repository.fullName, options.repoAliases);
-    const title = formatTitle(event, repoName);
+    const title = options.titleOverride ?? formatTitle(event, repoName);
     const notification: Notification = {
       title,
-      message: event.subject.title,
+      message: options.messageOverride ?? event.subject.title,
       sound: options.sound,
       wait: true, // Required for click handling
       timeout: 10, // Seconds before auto-dismiss (Linux)

@@ -1,6 +1,12 @@
 import type { GhPingConfig, NotificationEvent } from '../config/schema.js';
-import { fetchNotifications, fetchPullRequest, GitHubClientError } from '../github/client.js';
+import {
+  fetchNotifications,
+  fetchPullRequest,
+  fetchViewerLogin,
+  GitHubClientError,
+} from '../github/client.js';
 import { sendNotification, formatTitle, getRepoDisplayName } from '../notifications/notifier.js';
+import { getPrActivitySummary } from '../notifications/pr-activity.js';
 import { logger } from '../logging/logger.js';
 import { removePidFile } from './pid.js';
 
@@ -109,6 +115,10 @@ async function poll(config: GhPingConfig, since: Date | null): Promise<PollResul
   logger.debug(`${filtered.length} passed filters`);
 
   // Send notifications
+  const prSummaryCache = new Map<string, string | null>();
+  let viewerLogin: string | null = null;
+  let viewerLoginReady = false;
+
   for (const event of filtered) {
     if (await isClosedPR(event)) {
       logger.ping('debug', 'Skipping closed PR', event.subject.title);
@@ -116,12 +126,24 @@ async function poll(config: GhPingConfig, since: Date | null): Promise<PollResul
     }
 
     const repoName = getRepoDisplayName(event.repository.fullName, config.repoAliases);
-    const title = formatTitle(event, repoName);
+    let titleOverride: string | undefined;
+    if (event.subject.type === 'PullRequest') {
+      if (!viewerLoginReady) {
+        viewerLogin = await fetchViewerLogin();
+        viewerLoginReady = true;
+      }
+      const summary = await getPrActivitySummary(event, { viewerLogin, cache: prSummaryCache });
+      if (summary) {
+        titleOverride = `${summary} on \`${repoName}\``;
+      }
+    }
+    const title = titleOverride ?? formatTitle(event, repoName);
     logger.ping('info', title, event.subject.title);
 
     await sendNotification(event, {
       sound: config.notifications.sound ?? true,
       repoAliases: config.repoAliases,
+      titleOverride,
     });
   }
 

@@ -1,7 +1,9 @@
 import { spawn } from 'node:child_process';
-import type { GitHubNotification, PullRequestDetails } from './types.js';
+import type { GitHubNotification, IssueTimelineItem, PullRequestDetails } from './types.js';
 import type { NotificationEvent } from '../config/schema.js';
 import { transformNotifications } from './transform.js';
+
+let cachedViewerLogin: string | null | undefined;
 
 export interface FetchNotificationsResult {
   notifications: NotificationEvent[];
@@ -179,6 +181,114 @@ export async function fetchPullRequest(apiUrl: string): Promise<PullRequestDetai
 }
 
 /**
+ * Fetch issue timeline items for a PR
+ */
+export async function fetchIssueTimeline(
+  prApiUrl: string,
+  options?: { perPage?: number }
+): Promise<IssueTimelineItem[]> {
+  const timelineUrl = toIssueTimelineUrl(prApiUrl);
+  if (!timelineUrl) {
+    return [];
+  }
+
+  return new Promise((resolve, reject) => {
+    const perPage = options?.perPage ?? 30;
+    const args = [
+      'api',
+      timelineUrl,
+      '-F',
+      `per_page=${perPage}`,
+      '-H',
+      'Accept: application/vnd.github+json',
+    ];
+    const proc = spawn('gh', args, {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: true,
+    });
+
+    let stdout = '';
+    let stderr = '';
+
+    proc.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
+
+    proc.stderr.on('data', (data: Buffer) => {
+      stderr += data.toString();
+    });
+
+    proc.on('error', (err) => {
+      reject(new GitHubClientError(`Failed to spawn gh CLI: ${err.message}`, ''));
+    });
+
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        reject(new GitHubClientError(
+          `gh api failed with exit code ${code}: ${stderr.trim()}`,
+          stderr
+        ));
+        return;
+      }
+
+      if (!stdout.trim()) {
+        resolve([]);
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(stdout.trim()) as IssueTimelineItem[];
+        resolve(parsed);
+      } catch (e) {
+        reject(new GitHubClientError(
+          `Failed to parse gh output: ${e instanceof Error ? e.message : String(e)}`,
+          stdout
+        ));
+      }
+    });
+  });
+}
+
+/**
+ * Fetch the authenticated user's login
+ */
+export async function fetchViewerLogin(): Promise<string | null> {
+  if (cachedViewerLogin !== undefined) {
+    return cachedViewerLogin;
+  }
+
+  return new Promise((resolve) => {
+    const proc = spawn('gh', ['api', 'user', '--jq', '.login'], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      shell: true,
+    });
+
+    let stdout = '';
+
+    proc.stdout.on('data', (data: Buffer) => {
+      stdout += data.toString();
+    });
+
+    proc.on('error', () => {
+      cachedViewerLogin = null;
+      resolve(cachedViewerLogin);
+    });
+
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        cachedViewerLogin = null;
+        resolve(cachedViewerLogin);
+        return;
+      }
+
+      const login = stdout.trim();
+      cachedViewerLogin = login ? login : null;
+      resolve(cachedViewerLogin);
+    });
+  });
+}
+
+/**
  * Check if gh CLI is available and authenticated
  */
 export async function checkGhAuth(): Promise<{ ok: boolean; error?: string }> {
@@ -206,4 +316,11 @@ export async function checkGhAuth(): Promise<{ ok: boolean; error?: string }> {
       }
     });
   });
+}
+
+function toIssueTimelineUrl(prApiUrl: string): string | null {
+  if (!prApiUrl.includes('/pulls/')) {
+    return null;
+  }
+  return prApiUrl.replace('/pulls/', '/issues/') + '/timeline';
 }
