@@ -5,6 +5,13 @@ import { transformNotifications } from './transform.js';
 
 let cachedViewerLogin: string | null | undefined;
 
+function spawnGh(args: string[]) {
+  return spawn('gh', args, {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+  });
+}
+
 export interface FetchNotificationsResult {
   notifications: NotificationEvent[];
   pollIntervalSec?: number;
@@ -43,10 +50,7 @@ export async function fetchRawNotifications(options?: { since?: Date }): Promise
       args.push('-f', `since=${options.since.toISOString()}`);
     }
 
-    const proc = spawn('gh', args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      shell: true, // Required for Windows PATH resolution
-    });
+    const proc = spawnGh(args);
 
     let stdout = '';
     let stderr = '';
@@ -138,10 +142,7 @@ function extractHeaders(output: string): { body: string; pollIntervalSec?: numbe
  */
 export async function fetchPullRequest(apiUrl: string): Promise<PullRequestDetails> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('gh', ['api', apiUrl], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      shell: true,
-    });
+    const proc = spawnGh(['api', apiUrl]);
 
     let stdout = '';
     let stderr = '';
@@ -193,19 +194,16 @@ export async function fetchIssueTimeline(
   }
 
   return new Promise((resolve, reject) => {
-    const perPage = options?.perPage ?? 30;
+    const perPage = options?.perPage ?? 10;
     const args = [
       'api',
       timelineUrl,
+      '--method',
+      'GET',
       '-F',
       `per_page=${perPage}`,
-      '-H',
-      'Accept: application/vnd.github+json',
     ];
-    const proc = spawn('gh', args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      shell: true,
-    });
+    const proc = spawnGh(args);
 
     let stdout = '';
     let stderr = '';
@@ -258,10 +256,7 @@ export async function fetchViewerLogin(): Promise<string | null> {
   }
 
   return new Promise((resolve) => {
-    const proc = spawn('gh', ['api', 'user', '--jq', '.login'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      shell: true,
-    });
+    const proc = spawnGh(['api', 'user', '--jq', '.login']);
 
     let stdout = '';
 
@@ -293,10 +288,7 @@ export async function fetchViewerLogin(): Promise<string | null> {
  */
 export async function checkGhAuth(): Promise<{ ok: boolean; error?: string }> {
   return new Promise((resolve) => {
-    const proc = spawn('gh', ['auth', 'status'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      shell: true,
-    });
+    const proc = spawnGh(['auth', 'status']);
 
     let stderr = '';
 
