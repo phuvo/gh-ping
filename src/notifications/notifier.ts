@@ -1,3 +1,8 @@
+import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import os from 'node:os';
+import path from 'node:path';
 import notifier from 'node-notifier';
 import type { Notification } from 'node-notifier/notifiers/notificationcenter.js';
 import open from 'open';
@@ -13,34 +18,33 @@ interface NotifyOptions {
 /**
  * Send OS notification for a GitHub event
  */
-export function sendNotification(event: NotificationEvent, options: NotifyOptions): Promise<void> {
-  return new Promise((resolve) => {
-    const repoName = getRepoDisplayName(event.repository.fullName, options.repoAliases);
-    const title = options.titleOverride ?? formatTitle(event, repoName);
-    const notification: Notification = {
+export async function sendNotification(event: NotificationEvent, options: NotifyOptions): Promise<void> {
+  const repoName = getRepoDisplayName(event.repository.fullName, options.repoAliases);
+  const title = options.titleOverride ?? formatTitle(event, repoName);
+  const message = options.messageOverride ?? event.subject.title;
+  const url = event.subject.htmlUrl;
+
+  const isWindows = process.platform === 'win32';
+  const appIdReady = isWindows ? await ensureWindowsShortcut() : false;
+
+  if (isWindows && url) {
+    const shown = await sendWindowsProtocolNotification({
       title,
-      message: options.messageOverride ?? event.subject.title,
+      message,
+      url,
       sound: options.sound,
-      wait: true, // Required for click handling
-      timeout: 10, // Seconds before auto-dismiss (Linux)
-    };
-
-    notifier.notify(notification, (err) => {
-      if (err) {
-        // Log but don't fail - notification might still have shown
-        console.error('Notification error:', err.message);
-      }
-      resolve();
     });
+    if (shown) {
+      return;
+    }
+  }
 
-    // Handle click - open in browser
-    notifier.once('click', () => {
-      if (event.subject.htmlUrl) {
-        open(event.subject.htmlUrl).catch(() => {
-          // Ignore errors opening browser
-        });
-      }
-    });
+  return sendNotifierNotification({
+    title,
+    message,
+    sound: options.sound,
+    url,
+    appId: appIdReady ? windowsAppId : undefined,
   });
 }
 
@@ -58,6 +62,190 @@ export function sendTestNotification(): Promise<void> {
       resolve();
     });
   });
+}
+
+function sendNotifierNotification(options: {
+  title: string;
+  message: string;
+  sound: boolean;
+  url?: string;
+  appId?: string;
+}): Promise<void> {
+  return new Promise((resolve) => {
+    const notification: Notification & { appID?: string } = {
+      title: options.title,
+      message: options.message,
+      sound: options.sound,
+      wait: true, // Required for click handling
+      timeout: 10, // Seconds before auto-dismiss (Linux)
+    };
+    if (options.appId) {
+      notification.appID = options.appId;
+    }
+
+    notifier.notify(notification, (err, response, metadata) => {
+      if (err) {
+        // Log but don't fail - notification might still have shown
+        console.error('Notification error:', err.message);
+      }
+      const activationType = typeof metadata?.activationType === 'string'
+        ? metadata.activationType.toLowerCase()
+        : undefined;
+      const clicked = response === 'activate' || response === 'click' || activationType === 'activate'
+        || activationType === 'clicked';
+      if (options.url && clicked) {
+        open(options.url).catch(() => {
+          // Ignore errors opening browser
+        });
+      }
+      resolve();
+    });
+  });
+}
+
+const windowsAppId = 'gh-ping';
+let windowsShortcutReady: Promise<boolean> | null = null;
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/\r?\n/g, ' ')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+}
+
+function escapePowerShellString(value: string): string {
+  return value.replace(/'/g, "''");
+}
+
+function buildWindowsToastXml(options: {
+  title: string;
+  message: string;
+  url: string;
+  sound: boolean;
+}): string {
+  const title = escapeXml(options.title);
+  const message = escapeXml(options.message);
+  const url = escapeXml(options.url);
+  const audio = options.sound ? '' : '<audio silent="true" />';
+
+  return `<toast activationType="protocol" launch="${url}">${audio}<visual><binding template="ToastGeneric"><text>${title}</text><text>${message}</text></binding></visual></toast>`;
+}
+
+function encodePowerShell(command: string): string {
+  return Buffer.from(command, 'utf16le').toString('base64');
+}
+
+async function sendWindowsProtocolNotification(options: {
+  title: string;
+  message: string;
+  url: string;
+  sound: boolean;
+}): Promise<boolean> {
+  const ready = await ensureWindowsShortcut();
+  if (!ready) {
+    return false;
+  }
+
+  const xml = buildWindowsToastXml(options);
+  const script = [
+    "$ErrorActionPreference = 'Stop'",
+    '[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null',
+    '[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null',
+    `$xml = '${escapePowerShellString(xml)}'`,
+    '$doc = New-Object Windows.Data.Xml.Dom.XmlDocument',
+    '$doc.LoadXml($xml)',
+    '$toast = New-Object Windows.UI.Notifications.ToastNotification $doc',
+    `[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('${windowsAppId}').Show($toast)`,
+  ].join(';');
+  const encodedCommand = encodePowerShell(script);
+
+  return new Promise((resolve) => {
+    execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encodedCommand],
+      { windowsHide: true },
+      (error) => {
+        if (error) {
+          console.error('Windows toast error:', error.message);
+          resolve(false);
+          return;
+        }
+        resolve(true);
+      }
+    );
+  });
+}
+
+function ensureWindowsShortcut(): Promise<boolean> {
+  if (windowsShortcutReady) {
+    return windowsShortcutReady;
+  }
+
+  windowsShortcutReady = new Promise((resolve) => {
+    if (process.platform !== 'win32') {
+      resolve(false);
+      return;
+    }
+
+    const appData = process.env.APPDATA;
+    if (!appData) {
+      console.error('SnoreToast install error: APPDATA is not set.');
+      resolve(false);
+      return;
+    }
+
+    const shortcutPath = path.join(
+      appData,
+      'Microsoft',
+      'Windows',
+      'Start Menu',
+      'Programs',
+      'gh-ping.lnk'
+    );
+
+    if (existsSync(shortcutPath)) {
+      resolve(true);
+      return;
+    }
+
+    const snoreToastPath = getSnoreToastPath();
+    if (!snoreToastPath || !existsSync(snoreToastPath)) {
+      console.error('SnoreToast install error: snoretoast executable not found.');
+      resolve(false);
+      return;
+    }
+
+    execFile(
+      snoreToastPath,
+      ['-install', shortcutPath, process.execPath, windowsAppId],
+      { windowsHide: true },
+      (error) => {
+        if (error) {
+          console.error('SnoreToast install error:', error.message);
+          resolve(false);
+          return;
+        }
+        resolve(true);
+      }
+    );
+  });
+
+  return windowsShortcutReady;
+}
+
+function getSnoreToastPath(): string | null {
+  try {
+    const require = createRequire(import.meta.url);
+    const packagePath = require.resolve('node-notifier/package.json');
+    const notifierDir = path.dirname(packagePath);
+    const exeName = os.arch() === 'x64' ? 'snoretoast-x64.exe' : 'snoretoast-x86.exe';
+    return path.join(notifierDir, 'vendor', 'snoreToast', exeName);
+  } catch {
+    return null;
+  }
 }
 
 /**
