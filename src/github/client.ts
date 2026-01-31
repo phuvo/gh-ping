@@ -1,8 +1,8 @@
 import { spawn } from 'node:child_process';
-import type { Activity } from '../config/schema.js';
 import type { GitHubNotification, IssueTimelineItem, WorkflowRunSummary, FetchNotificationsResult } from './types.js';
 import { GitHubClientError } from './types.js';
-import { transformNotifications, transformTimeline } from './transform.js';
+import { transformNotifications } from './transform.js';
+import { logger } from '../logging/logger.js';
 
 /**
  * Spawn gh CLI and return stdout, stderr, and exit code
@@ -135,15 +135,79 @@ export async function fetchNotifications(options?: { since?: Date }): Promise<Fe
 }
 
 /**
- * Fetch issue/PR timeline
+ * Parse Link header to extract page numbers
+ * Format: <url?page=2>; rel="next", <url?page=5>; rel="last"
  */
-export async function fetchTimeline(owner: string, repo: string, issueNumber: number): Promise<Activity[]> {
-  const items = await ghApi<IssueTimelineItem[]>(
-    'GET',
-    `repos/${owner}/${repo}/issues/${issueNumber}/timeline`,
-    ['-F', 'per_page=10'],
-  );
-  return transformTimeline(items ?? []);
+function parseLinkHeader(linkHeader: string): { last?: number } {
+  const result: { last?: number } = {};
+
+  const links = linkHeader.split(',');
+  for (const link of links) {
+    const match = link.match(/<[^>]*[?&]page=(\d+)[^>]*>;\s*rel="(\w+)"/);
+    if (match) {
+      const [, page, rel] = match;
+      if (rel === 'last') {
+        result.last = Number(page);
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Fetch issue/PR timeline (latest activities)
+ * GitHub returns timeline events oldest-first, so we fetch the last page and walk backwards if needed
+ */
+export async function fetchLatestActivities({
+  owner,
+  repo,
+  issueId,
+  limit = 10,
+}: {
+  owner: string;
+  repo: string;
+  issueId: number;
+  limit?: number;
+}): Promise<IssueTimelineItem[]> {
+  if (limit <= 0) {
+    return [];
+  }
+
+  const endpoint = `repos/${owner}/${repo}/issues/${issueId}/timeline`;
+  const pageArgs = ['-F', `per_page=${limit}`];
+
+  // First request to get pagination info
+  const { data, headers } = await ghApiWithHeaders<IssueTimelineItem[]>('GET', endpoint, pageArgs);
+  const firstPage = data ?? [];
+
+  const linkHeader = headers['link'];
+  if (!linkHeader) {
+    // Only one page, return as-is
+    return firstPage;
+  }
+
+  const { last } = parseLinkHeader(linkHeader);
+  if (!last) {
+    // Link header exists but couldn't parse last page - unexpected
+    logger.warn(`Failed to parse last page from Link header: ${linkHeader}`);
+    return firstPage;
+  }
+
+  let currentPage = last;
+  let combinedItems: IssueTimelineItem[] = [];
+
+  while (combinedItems.length < limit && currentPage >= 1) {
+    const pageItems = await ghApi<IssueTimelineItem[]>(
+      'GET',
+      endpoint,
+      ['-F', `page=${currentPage}`, ...pageArgs],
+    );
+    combinedItems = (pageItems ?? []).concat(combinedItems);
+    currentPage -= 1;
+  }
+
+  return combinedItems.slice(-limit);
 }
 
 /**

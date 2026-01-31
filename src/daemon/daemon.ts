@@ -7,11 +7,12 @@ import type {
 } from '../config/schema.js';
 import {
   fetchNotifications,
-  fetchTimeline,
+  fetchLatestActivities,
   fetchLatestWorkflowRun,
   fetchViewerLogin,
   markThreadAsRead,
 } from '../github/client.js';
+import { transformTimeline } from '../github/transform.js';
 import {
   formatActivityNotification,
   formatThreadNotification,
@@ -200,12 +201,12 @@ async function enrichThread(thread: Thread): Promise<void> {
   }
 
   try {
-    const activities = await fetchTimeline(
-      thread.repository.owner,
-      thread.repository.name,
-      issueNumber
-    );
-    thread.activities = activities;
+    const activities = await fetchLatestActivities({
+      owner: thread.repository.owner,
+      repo: thread.repository.name,
+      issueId: issueNumber,
+    });
+    thread.activities = transformTimeline(activities);
   } catch (err) {
     logger.warn(`Failed to fetch timeline for ${thread.repository.fullName}#${issueNumber}: ${err}`);
     thread.activities = [];
