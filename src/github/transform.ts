@@ -37,74 +37,91 @@ export function transformNotification(n: GitHubNotification): Thread {
 }
 
 /**
- * Events we care about for activity tracking
- */
-const TRACKED_EVENTS = new Set([
-  'reviewed',
-  'commented',
-  'line-commented',
-  'review_requested',
-  'review_request_removed',
-  'assigned',
-  'unassigned',
-  'closed',
-  'reopened',
-  'merged',
-  'committed',
-  'head_ref_force_pushed',
-]);
-
-/**
  * Transform timeline items to Activity objects
  */
 export function transformTimeline(items: IssueTimelineItem[]): Activity[] {
   const activities: Activity[] = [];
 
   for (const item of items) {
-    const event = item.event;
-    if (!event || !TRACKED_EVENTS.has(event)) {
-      continue;
+    const activity = transformTimelineItem(item);
+    if (activity) {
+      activities.push(activity);
     }
-
-    // Get actor from various possible fields
-    const actorLogin = item.actor?.login ?? item.user?.login;
-
-    const activity: Activity = {
-      event,
-      createdAt: item.created_at ? new Date(item.created_at) : new Date(),
-      actor: actorLogin ? { login: actorLogin } : null,
-    };
-
-    // Add body for comments/reviews
-    if (item.body) {
-      activity.body = item.body;
-    }
-
-    // Add state for reviewed events
-    if (event === 'reviewed' && item.state) {
-      activity.state = item.state as Activity['state'];
-    }
-
-    // Add assignee for assigned/unassigned events
-    if ((event === 'assigned' || event === 'unassigned') && item.assignee?.login) {
-      activity.assignee = { login: item.assignee.login };
-    }
-
-    // Add requested reviewer for review_requested/review_request_removed events
-    if (event === 'review_requested' || event === 'review_request_removed') {
-      if (item.requested_reviewer?.login) {
-        activity.requestedReviewer = { login: item.requested_reviewer.login };
-      }
-      if (item.requested_team?.name && item.requested_team?.slug) {
-        activity.requestedTeam = {
-          name: item.requested_team.name,
-          slug: item.requested_team.slug,
-        };
-      }
-    }
-
-    activities.push(activity);
   }
 
   return activities;
+}
+
+/**
+ * Transform a single timeline item to Activity (or null if not tracked)
+ */
+function transformTimelineItem(item: IssueTimelineItem): Activity | null {
+  switch (item.event) {
+    case 'committed':
+      return {
+        event: 'committed',
+        createdAt: new Date(item.author.date),
+        body: item.message,
+        author: { name: item.author.name, email: item.author.email },
+        committer: { name: item.committer.name, email: item.committer.email },
+      };
+
+    case 'reviewed':
+      return {
+        event: item.event,
+        createdAt: item.submitted_at ? new Date(item.submitted_at) : new Date(),
+        actor: { login: item.user.login },
+        state: item.state as Activity['state'],
+        body: item.body ?? undefined,
+      };
+
+    case 'assigned':
+    case 'unassigned':
+      return {
+        event: item.event,
+        createdAt: new Date(item.created_at),
+        actor: { login: item.actor.login },
+        assignee: { login: item.assignee.login },
+      };
+
+    case 'review_requested':
+    case 'review_request_removed':
+      return {
+        event: item.event,
+        createdAt: new Date(item.created_at),
+        actor: { login: item.actor.login },
+        requestedReviewer: item.requested_reviewer ? { login: item.requested_reviewer.login } : undefined,
+        requestedTeam: item.requested_team ? { name: item.requested_team.name, slug: item.requested_team.slug } : undefined,
+      };
+
+    case 'commented':
+      return {
+        event: item.event,
+        createdAt: new Date(item.created_at),
+        actor: { login: item.actor.login },
+        body: item.body,
+      };
+
+    case 'line-commented': {
+      const firstComment = item.comments?.[0];
+      return {
+        event: item.event,
+        createdAt: firstComment?.created_at ? new Date(firstComment.created_at) : new Date(),
+        actor: firstComment?.user ? { login: firstComment.user.login } : undefined,
+        body: firstComment?.body,
+      };
+    }
+
+    case 'closed':
+    case 'reopened':
+    case 'merged':
+      return {
+        event: item.event,
+        createdAt: new Date(item.created_at),
+        actor: { login: item.actor.login },
+      };
+
+    default:
+      return null;
+  }
 }

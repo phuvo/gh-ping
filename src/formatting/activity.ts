@@ -61,6 +61,26 @@ export function formatActivityTitle(
     case 'reopened':
       return `${actor} reopened "${prTitle}"`;
 
+    case 'committed': {
+      // Use committer as primary, show author if different
+      const committerName = activity.committer?.name
+        ? getUserDisplayName(activity.committer.name, config.userAliases)
+        : undefined;
+      const authorName = activity.author?.name
+        ? getUserDisplayName(activity.author.name, config.userAliases)
+        : undefined;
+
+      if (committerName && authorName && committerName !== authorName) {
+        // Different author and committer (e.g., co-authored, cherry-picked)
+        return `${authorName} committed (via ${committerName}) on "${prTitle}"`;
+      } else if (committerName) {
+        return `${committerName} pushed a commit to "${prTitle}"`;
+      } else if (authorName) {
+        return `${authorName} pushed a commit to "${prTitle}"`;
+      }
+      return `New commits pushed to "${prTitle}"`;
+    }
+
     default:
       // Skip unknown events
       return '';

@@ -32,11 +32,14 @@ export interface ThreadFilterInput {
 export interface ActivityFilterInput {
   event: string;
   createdAt: Date;
-  actor: { login: string } | null;
+  actor?: { login: string };
   state?: 'approved' | 'changes_requested' | 'commented' | 'dismissed';
   assignee?: { login: string };
   requestedReviewer?: { login: string };
   requestedTeam?: { name: string; slug: string };
+  /** For 'committed' events - git signature name */
+  author?: { name: string; email: string };
+  committer?: { name: string; email: string };
 }
 
 /**
@@ -110,9 +113,7 @@ export interface Activity {
   /** Raw GitHub event type: 'reviewed', 'commented', 'merged', etc. */
   event: string;
   createdAt: Date;
-  actor: {
-    login: string;
-  } | null;
+  actor?: { login: string; };
   /** Comment/review body text */
   body?: string;
   /** For 'reviewed' events */
@@ -122,6 +123,9 @@ export interface Activity {
   /** For 'review_requested' events */
   requestedReviewer?: { login: string };
   requestedTeam?: { name: string; slug: string };
+  /** For 'committed' events - git signature */
+  author?: { name: string; email: string };
+  committer?: { name: string; email: string };
 }
 
 /**
