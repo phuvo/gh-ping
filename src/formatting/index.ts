@@ -3,6 +3,7 @@ export {
   formatActivityTitle,
   formatActivityBody,
   formatActivityNotification,
+  reduceActivities,
 } from './activity.js';
 export {
   formatReasonTitle,

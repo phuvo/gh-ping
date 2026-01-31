@@ -11,13 +11,19 @@ export function formatActivityTitle(
   config: GhPingConfig,
   viewerLogin?: string | null
 ): string {
-  const { event, state } = activity;
+  const { event, state, count = 1 } = activity;
 
   switch (event) {
     case 'commented':
+      if (count > 1) {
+        return `${actor} left comments on "${prTitle}"`;
+      }
       return `${actor} commented on "${prTitle}"`;
 
     case 'line-commented':
+      if (count > 1) {
+        return `${actor} left code comments on "${prTitle}"`;
+      }
       return `${actor} commented on code in "${prTitle}"`;
 
     case 'reviewed':
@@ -27,8 +33,14 @@ export function formatActivityTitle(
         case 'changes_requested':
           return `${actor} requested changes on "${prTitle}"`;
         case 'commented':
+          if (count > 1) {
+            return `${actor} left reviews on "${prTitle}"`;
+          }
           return `${actor} left a review on "${prTitle}"`;
         case 'dismissed':
+          if (count > 1) {
+            return `${actor} dismissed reviews on "${prTitle}"`;
+          }
           return `${actor} dismissed a review on "${prTitle}"`;
         default:
           return `${actor} reviewed "${prTitle}"`;
@@ -70,13 +82,21 @@ export function formatActivityTitle(
         ? getUserDisplayName(activity.author.name, config.userAliases)
         : undefined;
 
+      const commitWord = count > 1 ? 'commits' : 'a commit';
+
       if (committerName && authorName && committerName !== authorName) {
         // Different author and committer (e.g., co-authored, cherry-picked)
+        if (count > 1) {
+          return `${authorName} committed (via ${committerName}) on "${prTitle}"`;
+        }
         return `${authorName} committed (via ${committerName}) on "${prTitle}"`;
       } else if (committerName) {
-        return `${committerName} pushed a commit to "${prTitle}"`;
+        return `${committerName} pushed ${commitWord} to "${prTitle}"`;
       } else if (authorName) {
-        return `${authorName} pushed a commit to "${prTitle}"`;
+        return `${authorName} pushed ${commitWord} to "${prTitle}"`;
+      }
+      if (count > 1) {
+        return `Commits pushed to "${prTitle}"`;
       }
       return `New commits pushed to "${prTitle}"`;
     }
@@ -85,6 +105,62 @@ export function formatActivityTitle(
       // Skip unknown events
       return '';
   }
+}
+
+/**
+ * Get a unique key for grouping activities by actor and event type.
+ * For 'reviewed' events, also includes state to differentiate approvals vs comments.
+ * For 'committed' events, uses committer/author name as actor.
+ */
+function getActivityGroupKey(activity: Activity): string {
+  const event = activity.event;
+
+  // For commits, use committer or author name as the actor
+  if (event === 'committed') {
+    const actor = activity.committer?.name ?? activity.author?.name ?? 'unknown';
+    return `${actor}:${event}`;
+  }
+
+  // For reviews, include state to group approvals separately from comment reviews
+  if (event === 'reviewed' && activity.state) {
+    return `${activity.actor?.login ?? 'unknown'}:${event}:${activity.state}`;
+  }
+
+  return `${activity.actor?.login ?? 'unknown'}:${event}`;
+}
+
+/**
+ * Reduce activities by collapsing duplicate (actor + event type) combinations.
+ * Keeps the latest occurrence of each group and sets count for pluralization.
+ * Maintains order based on the latest occurrence of each group.
+ */
+export function reduceActivities(activities: Activity[]): Activity[] {
+  // Map from group key to { activity, count, lastIndex }
+  const groups = new Map<string, { activity: Activity; count: number; lastIndex: number }>();
+
+  // Process activities in order (oldest to newest)
+  activities.forEach((activity, index) => {
+    const key = getActivityGroupKey(activity);
+    const existing = groups.get(key);
+
+    if (existing) {
+      // Update to latest occurrence and increment count
+      existing.activity = activity;
+      existing.count += 1;
+      existing.lastIndex = index;
+    } else {
+      groups.set(key, { activity, count: 1, lastIndex: index });
+    }
+  });
+
+  // Sort by lastIndex to maintain order of latest occurrences
+  const sorted = Array.from(groups.values()).sort((a, b) => a.lastIndex - b.lastIndex);
+
+  // Return activities with count set
+  return sorted.map(({ activity, count }) => ({
+    ...activity,
+    count,
+  }));
 }
 
 /**

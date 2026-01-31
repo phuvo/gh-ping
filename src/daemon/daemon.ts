@@ -16,6 +16,7 @@ import {
   formatActivityNotification,
   formatThreadNotification,
   extractBranchFromSubject,
+  reduceActivities,
 } from '../formatting/index.js';
 import { sendNotification } from '../toast/sender.js';
 import { logger } from '../logging/logger.js';
@@ -305,7 +306,12 @@ async function poll(config: GhPingConfig, since: Date | null): Promise<PollResul
     );
   }
 
-  // 5. FORMAT & 6. NOTIFY (one toast per activity)
+  // 5. REDUCE ACTIVITIES (collapse same actor + event type)
+  for (const thread of kept) {
+    thread.activities = reduceActivities(thread.activities);
+  }
+
+  // 6. FORMAT & 7. NOTIFY (one toast per reduced activity)
   for (const thread of kept) {
     // Check if workflow notification should be skipped
     if (await shouldSkipWorkflowNotification(thread)) {

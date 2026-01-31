@@ -126,6 +126,8 @@ export interface Activity {
   /** For 'committed' events - git signature */
   author?: { name: string; email: string };
   committer?: { name: string; email: string };
+  /** Number of collapsed activities (set by reduceActivities) */
+  count?: number;
 }
 
 /**
