@@ -65,6 +65,8 @@ export interface GhPingUserConfig {
   userAliases?: Record<string, string>;
   sound?: boolean;
   markAsReadOnClick?: boolean;
+  /** Collapse activities before a merge into the merge notification (default: true) */
+  collapseMergedPrActivities?: boolean;
 }
 
 /**
@@ -78,6 +80,8 @@ export interface GhPingConfig {
   userAliases: Record<string, string>;
   sound: boolean;
   markAsReadOnClick: boolean;
+  /** Collapse activities before a merge into the merge notification */
+  collapseMergedPrActivities: boolean;
 }
 
 /**
@@ -128,6 +132,8 @@ export interface Activity {
   committer?: { name: string; email: string };
   /** Number of collapsed activities (set by reduceActivities) */
   count?: number;
+  /** Number of events collapsed before a merge (set by collapseMergeEvents) */
+  preMergeCount?: number;
 }
 
 /**

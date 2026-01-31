@@ -12,5 +12,6 @@ export function applyDefaults(userConfig: GhPingUserConfig): GhPingConfig {
     userAliases: userConfig.userAliases ?? {},
     sound: userConfig.sound ?? true,
     markAsReadOnClick: userConfig.markAsReadOnClick ?? true,
+    collapseMergedPrActivities: userConfig.collapseMergedPrActivities ?? true,
   };
 }
