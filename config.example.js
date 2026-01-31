@@ -34,4 +34,7 @@ export default {
   // ─── Behavior ───
   sound: true,
   markAsReadOnClick: true,
+
+  // Collapse activities before a merge into the merge notification (e.g., "John merged 'PR' and more")
+  collapseMergedPrActivities: true,
 };

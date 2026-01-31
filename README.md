@@ -147,6 +147,9 @@ export default {
   // ─── Behavior ───
   sound: true,
   markAsReadOnClick: true,
+
+  // Collapse pre-merge activities into the merge notification
+  collapseMergedPrActivities: true,
 };
 ```
 
@@ -161,6 +164,7 @@ export default {
 | `userAliases` | `Record<string, string>` | `{}` | Map usernames to short display names. |
 | `sound` | `boolean` | `true` | Play sound with notifications. |
 | `markAsReadOnClick` | `boolean` | `true` | Mark thread as read when clicking notification. |
+| `collapseMergedPrActivities` | `boolean` | `true` | Collapse activities before a merge into one notification (e.g., "John merged 'PR' + earlier activities"). |
 
 ## How It Works
 

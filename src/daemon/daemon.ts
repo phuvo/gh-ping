@@ -18,6 +18,7 @@ import {
   formatThreadNotification,
   extractBranchFromSubject,
   reduceActivities,
+  collapseMergeActivities,
 } from '../formatting/index.js';
 import { sendNotification } from '../toast/sender.js';
 import { logger } from '../logging/logger.js';
@@ -26,25 +27,11 @@ import { writePidFile, removePidFile } from './pid.js';
 // Default poll interval fallback (seconds)
 const DEFAULT_POLL_INTERVAL_SEC = 60;
 
-// In-memory deduplication map
-const deliveredActivities = new Map<string, true>();
+// Track when we last processed activities (only show newer ones)
+let lastProcessedTime: Date | null = null;
 
 // Workflow pass cache
 const workflowPassCache = new Map<string, boolean>();
-
-/**
- * Create activity deduplication key
- */
-function getActivityKey(threadId: string, activity: Activity): string {
-  return `${threadId}:${activity.event}:${activity.createdAt.toISOString()}`;
-}
-
-/**
- * Create thread-level deduplication key (fallback)
- */
-function getThreadKey(thread: Thread): string {
-  return `${thread.id}:thread:${thread.updatedAt.toISOString()}`;
-}
 
 /**
  * Convert Thread to ThreadFilterInput (minimal data for filter functions)
@@ -312,7 +299,18 @@ async function poll(config: GhPingConfig, since: Date | null): Promise<PollResul
     thread.activities = reduceActivities(thread.activities);
   }
 
-  // 6. FORMAT & 7. NOTIFY (one toast per reduced activity)
+  // 5.5 COLLAPSE MERGE ACTIVITIES (fold pre-merge activities into the merge notification)
+  if (config.collapseMergedPrActivities) {
+    for (const thread of kept) {
+      if (thread.subject.type === 'PullRequest') {
+        thread.activities = collapseMergeActivities(thread.activities);
+      }
+    }
+  }
+
+  // 6. FORMAT & 7. NOTIFY (one toast per activity since last processed time)
+  let maxActivityTime: Date | null = null;
+
   for (const thread of kept) {
     // Check if workflow notification should be skipped
     if (await shouldSkipWorkflowNotification(thread)) {
@@ -321,13 +319,16 @@ async function poll(config: GhPingConfig, since: Date | null): Promise<PollResul
     }
 
     if (thread.activities.length > 0) {
-      // Send notification for each activity
+      // Send notification for each activity newer than lastProcessedTime
       for (const activity of thread.activities) {
-        const activityKey = getActivityKey(thread.id, activity);
-
-        // Skip if already delivered
-        if (deliveredActivities.has(activityKey)) {
+        // Skip activities from before last processed time
+        if (lastProcessedTime && activity.createdAt <= lastProcessedTime) {
           continue;
+        }
+
+        // Track max activity time for updating lastProcessedTime
+        if (!maxActivityTime || activity.createdAt > maxActivityTime) {
+          maxActivityTime = activity.createdAt;
         }
 
         const formatted = formatActivityNotification(thread, activity, config, viewerLogin);
@@ -339,15 +340,17 @@ async function poll(config: GhPingConfig, since: Date | null): Promise<PollResul
             thread,
             config,
           });
-          deliveredActivities.set(activityKey, true);
         }
       }
     } else {
-      // Fallback: thread-level notification
-      const threadKey = getThreadKey(thread);
-
-      if (deliveredActivities.has(threadKey)) {
+      // Fallback: thread-level notification (only if thread updated since last processed)
+      if (lastProcessedTime && thread.updatedAt <= lastProcessedTime) {
         continue;
+      }
+
+      // Track max time for updating lastProcessedTime
+      if (!maxActivityTime || thread.updatedAt > maxActivityTime) {
+        maxActivityTime = thread.updatedAt;
       }
 
       const formatted = formatThreadNotification(thread, config);
@@ -358,8 +361,15 @@ async function poll(config: GhPingConfig, since: Date | null): Promise<PollResul
         thread,
         config,
       });
-      deliveredActivities.set(threadKey, true);
     }
+  }
+
+  // Update lastProcessedTime to the latest activity/thread time we saw
+  if (maxActivityTime) {
+    lastProcessedTime = maxActivityTime;
+  } else if (!lastProcessedTime) {
+    // On first run with no activities, set to now so we don't re-notify old stuff
+    lastProcessedTime = requestStartTime;
   }
 
   // Compute next since

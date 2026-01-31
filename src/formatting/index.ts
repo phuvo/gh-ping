@@ -4,6 +4,7 @@ export {
   formatActivityBody,
   formatActivityNotification,
   reduceActivities,
+  collapseMergeActivities,
 } from './activity.js';
 export {
   formatReasonTitle,

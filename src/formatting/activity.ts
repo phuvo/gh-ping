@@ -68,9 +68,12 @@ export function formatActivityTitle(
       }
       return `${actor} assigned someone to "${prTitle}"`;
 
-    case 'merged':
-      return `${actor} merged "${prTitle}"`;
-
+    case 'merged': {
+        if (activity.preMergeCount) {
+          return `${actor} merged "${prTitle}" + earlier activities`;
+        }
+        return `${actor} merged "${prTitle}"`;
+    }
     case 'closed':
       return `${actor} closed "${prTitle}"`;
 
@@ -165,6 +168,42 @@ export function reduceActivities(activities: Activity[]): Activity[] {
     ...activity,
     count,
   }));
+}
+
+/**
+ * Collapse activities before a merge into the merge activity itself.
+ * Activities after the merge are kept as separate notifications.
+ * Returns the modified list of activities.
+ */
+export function collapseMergeActivities(activities: Activity[]): Activity[] {
+  // Find the index of a 'merged' event
+  const mergeIndex = activities.findIndex((a) => a.event === 'merged');
+
+  // No merge event found, return as-is
+  if (mergeIndex === -1) {
+    return activities;
+  }
+
+  // Count events before the merge
+  const preMergeCount = mergeIndex;
+
+  // If no events before merge, return as-is
+  if (preMergeCount === 0) {
+    return activities;
+  }
+
+  // Get the merge event and events after it
+  const mergeActivity = activities[mergeIndex];
+  const postMergeActivity = activities.slice(mergeIndex + 1);
+
+  // Create updated merge event with preMergeCount
+  const collapsedMerge: Activity = {
+    ...mergeActivity,
+    preMergeCount,
+  };
+
+  // Return: collapsed merge + events after merge
+  return [collapsedMerge, ...postMergeActivity];
 }
 
 /**
