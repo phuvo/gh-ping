@@ -7,7 +7,7 @@ import type {
 } from '../config/schema.js';
 import {
   fetchNotifications,
-  fetchTimeline,
+  fetchLatestTimelineEvents,
   fetchLatestWorkflowRun,
   fetchViewerLogin,
   markThreadAsRead,
@@ -200,7 +200,7 @@ async function enrichThread(thread: Thread): Promise<void> {
   }
 
   try {
-    const activities = await fetchTimeline(
+    const activities = await fetchLatestTimelineEvents(
       thread.repository.owner,
       thread.repository.name,
       issueNumber

@@ -3,6 +3,7 @@ import type { Activity } from '../config/schema.js';
 import type { GitHubNotification, IssueTimelineItem, WorkflowRunSummary, FetchNotificationsResult } from './types.js';
 import { GitHubClientError } from './types.js';
 import { transformNotifications, transformTimeline } from './transform.js';
+import { logger } from '../logging/logger.js';
 
 /**
  * Spawn gh CLI and return stdout, stderr, and exit code
@@ -135,15 +136,56 @@ export async function fetchNotifications(options?: { since?: Date }): Promise<Fe
 }
 
 /**
- * Fetch issue/PR timeline
+ * Parse Link header to extract page numbers
+ * Format: <url?page=2>; rel="next", <url?page=5>; rel="last"
  */
-export async function fetchTimeline(owner: string, repo: string, issueNumber: number): Promise<Activity[]> {
-  const items = await ghApi<IssueTimelineItem[]>(
-    'GET',
-    `repos/${owner}/${repo}/issues/${issueNumber}/timeline`,
-    ['-F', 'per_page=10'],
-  );
-  return transformTimeline(items ?? []);
+function parseLinkHeader(linkHeader: string): { last?: number } {
+  const result: { last?: number } = {};
+
+  const links = linkHeader.split(',');
+  for (const link of links) {
+    const match = link.match(/<[^>]*[?&]page=(\d+)[^>]*>;\s*rel="(\w+)"/);
+    if (match) {
+      const [, page, rel] = match;
+      if (rel === 'last') {
+        result.last = Number(page);
+      }
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Fetch issue/PR timeline (latest items)
+ * GitHub returns timeline events oldest-first, so we fetch the last page to get latest events
+ */
+export async function fetchLatestTimelineEvents(owner: string, repo: string, issueNumber: number): Promise<Activity[]> {
+  const endpoint = `repos/${owner}/${repo}/issues/${issueNumber}/timeline`;
+
+  // First request to get pagination info
+  const { data: firstPage, headers } = await ghApiWithHeaders<IssueTimelineItem[]>('GET', endpoint);
+
+  const linkHeader = headers['link'];
+  if (!linkHeader) {
+    // Only one page, return as-is
+    return transformTimeline(firstPage ?? []);
+  }
+
+  const { last } = parseLinkHeader(linkHeader);
+  if (!last) {
+    // Link header exists but couldn't parse last page - unexpected
+    logger.warn(`Failed to parse last page from Link header: ${linkHeader}`);
+    return transformTimeline(firstPage ?? []);
+  }
+  if (last === 1) {
+    // Only one page
+    return transformTimeline(firstPage ?? []);
+  }
+
+  // Fetch the last page to get latest items
+  const lastPageItems = await ghApi<IssueTimelineItem[]>('GET', endpoint, ['-F', `page=${last}`]);
+  return transformTimeline(lastPageItems ?? []);
 }
 
 /**
