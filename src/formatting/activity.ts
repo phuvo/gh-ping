@@ -55,6 +55,10 @@ export function formatActivityTitle(
 
     case 'assigned':
       if (activity.assignee) {
+        // Check if self-assigned
+        if (activity.actor?.login === activity.assignee.login) {
+          return `${actor} assigned themselves to "${prTitle}"`;
+        }
         const assignee = getUserDisplayName(activity.assignee.login, config.userAliases);
         // Check if assigned to viewer
         if (viewerLogin && activity.assignee.login === viewerLogin) {

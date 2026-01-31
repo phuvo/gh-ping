@@ -49,6 +49,16 @@ export function transformTimeline(items: IssueTimelineItem[]): Activity[] {
     }
   }
 
+  // Skip redundant 'closed' event if it immediately follows a 'merged' event
+  // (GitHub fires both when a PR is merged)
+  if (activities.length >= 2) {
+    const last = activities[activities.length - 1];
+    const secondLast = activities[activities.length - 2];
+    if (last.event === 'closed' && secondLast.event === 'merged') {
+      activities.pop();
+    }
+  }
+
   return activities;
 }
 
